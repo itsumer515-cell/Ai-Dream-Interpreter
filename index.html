@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Oneiro — Dream Interpreter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=EB+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020008;
+  --surface:#08021a;
+  --surface2:#0f0424;
+  --gold:#d4a843;
+  --gold-bright:#f0c960;
+  --gold-dim:#8a6a20;
+  --amber:#e8834a;
+  --violet:#9b59f5;
+  --violet-dim:#4a1d96;
+  --rose:#e05c8a;
+  --teal:#0fbcd4;
+  --sage:#6bcfb5;
+  --text:#ede8f5;
+  --text2:rgba(237,232,245,0.55);
+  --text3:rgba(237,232,245,0.25);
+  --text4:rgba(237,232,245,0.12);
+  --border:rgba(212,168,67,0.12);
+  --border-bright:rgba(212,168,67,0.28);
+  --glow:rgba(155,89,245,0.15);
+}
+
+html{scroll-behavior:smooth}
+body{
+  min-height:100vh;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'EB Garamond',Georgia,serif;
+  overflow-x:hidden;
+  cursor:none;
+}
+
+/* ─── CUSTOM CURSOR ─── */
+#cursor{
+  position:fixed;width:12px;height:12px;border-radius:50%;
+  background:var(--gold);mix-blend-mode:screen;
+  pointer-events:none;z-index:9999;transform:translate(-50%,-50%);
+  transition:transform 0.1s,width 0.2s,height 0.2s,opacity 0.2s;
+}
+#cursor-ring{
+  position:fixed;width:36px;height:36px;border-radius:50%;
+  border:1px solid rgba(212,168,67,0.4);
+  pointer-events:none;z-index:9998;transform:translate(-50%,-50%);
+  transition:transform 0.15s ease,width 0.3s,height 0.3s,border-color 0.3s;
+}
+body:has(button:hover) #cursor{width:20px;height:20px;background:var(--gold-bright)}
+body:has(textarea:focus) #cursor-ring{border-color:rgba(212,168,67,0.7);width:44px;height:44px}
+
+/* ─── CANVAS ─── */
+#bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* ─── NOISE GRAIN ─── */
+body::before{
+  content:'';position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.035;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
+
+/* ─── PAGE WRAPPER ─── */
+.page{position:relative;z-index:2;min-height:100vh}
+
+/* ─── NAV ─── */
+nav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:28px 48px;
+  border-bottom:1px solid var(--border);
+  backdrop-filter:blur(20px);
+  background:rgba(2,0,8,0.6);
+  position:sticky;top:0;z-index:100;
+}
+.logo{
+  display:flex;align-items:center;gap:16px;
+  text-decoration:none;
+}
+.logo-glyph{
+  width:38px;height:38px;position:relative;
+  flex-shrink:0;
+}
+.logo-glyph svg{width:100%;height:100%}
+.logo-name{
+  font-family:'Cinzel',serif;font-size:1.4rem;font-weight:700;
+  letter-spacing:0.12em;color:var(--gold);
+}
+.logo-name em{color:var(--rose);font-style:normal}
+.nav-center{
+  display:flex;align-items:center;gap:32px;
+}
+.nav-link{
+  font-family:'JetBrains Mono',monospace;font-size:0.62rem;
+  letter-spacing:0.15em;color:var(--text3);text-transform:uppercase;
+  text-decoration:none;cursor:none;
+  transition:color 0.2s;border:none;background:none;padding:0;
+}
+.nav-link:hover{color:var(--gold)}
+.nav-link.active{color:var(--gold-bright)}
+.nav-right{display:flex;align-items:center;gap:14px}
+.status-dot{
+  width:7px;height:7px;border-radius:50%;background:var(--sage);
+  box-shadow:0 0 8px var(--sage);
+  animation:breathe 3s ease-in-out infinite;
+}
+@keyframes breathe{0%,100%{opacity:0.5;transform:scale(0.85)}50%{opacity:1;transform:scale(1.15)}}
+.status-label{font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.14em;color:var(--text3);text-transform:uppercase}
+
+/* ─── TICKER ─── */
+.ticker-wrap{
+  overflow:hidden;
+  border-bottom:1px solid var(--border);
+  padding:9px 0;background:rgba(15,4,36,0.5);
+}
+.ticker-track{display:flex;gap:0;animation:ticker 50s linear infinite;white-space:nowrap}
+.ticker-item{
+  font-family:'JetBrains Mono',monospace;font-size:0.58rem;
+  letter-spacing:0.16em;color:var(--text4);text-transform:uppercase;
+  padding:0 28px;flex-shrink:0;
+  border-right:1px solid var(--border);
+}
+.ticker-item.lit{color:rgba(212,168,67,0.4)}
+@keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* ─── HERO SECTION ─── */
+.hero-section{
+  display:grid;grid-template-columns:1fr 500px;
+  gap:0;align-items:stretch;
+  min-height:calc(100vh - 97px);
+  max-width:1440px;margin:0 auto;
+}
+.hero-left{
+  padding:72px 64px 72px 48px;
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;justify-content:center;
+}
+.hero-right{
+  padding:48px 48px 48px 48px;
+  display:flex;flex-direction:column;
+  justify-content:flex-start;
+  background:linear-gradient(160deg,rgba(155,89,245,0.04),rgba(2,0,8,0));
+}
+
+/* ─── EYEBROW ─── */
+.eyebrow{
+  display:flex;align-items:center;gap:14px;margin-bottom:36px;
+  opacity:0;animation:fadeUp 0.8s 0.2s ease forwards;
+}
+.eyebrow-mark{
+  width:32px;height:1px;background:linear-gradient(90deg,transparent,var(--teal));
+}
+.eyebrow-text{
+  font-family:'JetBrains Mono',monospace;font-size:0.62rem;
+  letter-spacing:0.25em;color:var(--teal);text-transform:uppercase;
+}
+
+/* ─── H1 ─── */
+h1{
+  font-family:'Cinzel',serif;
+  font-size:clamp(3.2rem,5.5vw,5.8rem);
+  font-weight:900;line-height:0.95;
+  margin-bottom:32px;
+  opacity:0;animation:fadeUp 0.8s 0.35s ease forwards;
+}
+h1 .w1{display:block;color:var(--text)}
+h1 .w2{
+  display:block;
+  background:linear-gradient(125deg,var(--gold-bright) 0%,var(--amber) 35%,var(--rose) 65%,var(--violet) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  font-style:normal;
+}
+
+.hero-sub{
+  font-size:1.15rem;line-height:2;color:var(--text2);
+  font-weight:400;max-width:520px;margin-bottom:48px;
+  font-style:italic;
+  opacity:0;animation:fadeUp 0.8s 0.5s ease forwards;
+}
+
+/* ─── STATS ─── */
+.stats-row{
+  display:flex;gap:0;
+  border:1px solid var(--border);border-radius:14px;overflow:hidden;
+  margin-bottom:56px;
+  opacity:0;animation:fadeUp 0.8s 0.65s ease forwards;
+}
+.stat-block{
+  flex:1;padding:18px 20px;
+  border-right:1px solid var(--border);
+  transition:background 0.25s;
+  position:relative;overflow:hidden;
+}
+.stat-block:last-child{border-right:none}
+.stat-block::before{
+  content:'';position:absolute;inset:0;opacity:0;
+  background:radial-gradient(ellipse at 50% 0%,rgba(212,168,67,0.08),transparent 70%);
+  transition:opacity 0.3s;
+}
+.stat-block:hover::before{opacity:1}
+.stat-n{
+  font-family:'Cinzel',serif;font-size:1.9rem;
+  font-weight:900;color:var(--gold);line-height:1;margin-bottom:5px;
+}
+.stat-l{
+  font-family:'JetBrains Mono',monospace;font-size:0.56rem;
+  letter-spacing:0.1em;color:var(--text3);text-transform:uppercase;
+}
+
+/* ─── HOW IT WORKS ─── */
+.how-section{opacity:0;animation:fadeUp 0.8s 0.8s ease forwards}
+.how-label{
+  font-family:'JetBrains Mono',monospace;font-size:0.58rem;
+  letter-spacing:0.2em;color:var(--text3);text-transform:uppercase;
+  margin-bottom:20px;display:flex;align-items:center;gap:10px;
+}
+.how-label::before{content:'';display:inline-block;width:20px;height:1px;background:var(--text3)}
+.how-steps{display:flex;flex-direction:column;gap:0}
+.how-step{
+  display:flex;gap:18px;padding:18px 0;
+  border-bottom:1px solid var(--text4);
+  align-items:flex-start;
+}
+.how-step:last-child{border-bottom:none}
+.step-icon{
+  width:32px;height:32px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:0.7rem;font-weight:500;
+  margin-top:1px;
+}
+.step-icon.a{background:rgba(212,168,67,0.1);border:1px solid rgba(212,168,67,0.25);color:var(--gold)}
+.step-icon.b{background:rgba(15,188,212,0.1);border:1px solid rgba(15,188,212,0.25);color:var(--teal)}
+.step-icon.c{background:rgba(155,89,245,0.1);border:1px solid rgba(155,89,245,0.25);color:var(--violet)}
+.step-title{font-size:1rem;font-weight:500;color:var(--text);margin-bottom:4px}
+.step-desc{font-size:0.85rem;color:var(--text3);line-height:1.6;font-style:italic}
+
+/* ─── PANEL (right) ─── */
+.panel{
+  opacity:0;animation:fadeUp 0.8s 0.4s ease forwards;
+}
+
+.panel-head{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:28px;
+}
+.panel-title{
+  font-family:'Cinzel',serif;font-size:0.95rem;font-weight:700;
+  letter-spacing:0.1em;color:var(--gold);
+}
+.panel-chip{
+  font-family:'JetBrains Mono',monospace;font-size:0.56rem;letter-spacing:0.1em;
+  background:rgba(212,168,67,0.06);border:1px solid var(--border-bright);
+  border-radius:100px;padding:4px 12px;color:var(--gold-dim);
+}
+
+/* ─── MOOD SELECTOR ─── */
+.mood-row-label{
+  font-family:'JetBrains Mono',monospace;font-size:0.58rem;
+  letter-spacing:0.16em;color:var(--text3);text-transform:uppercase;margin-bottom:10px;
+}
+.moods{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:22px}
+.mood-btn{
+  padding:6px 13px;border-radius:6px;
+  border:1px solid var(--text4);background:rgba(255,255,255,0.02);
+  font-family:'EB Garamond',serif;font-size:0.9rem;
+  color:var(--text3);cursor:none;transition:all 0.2s;
+}
+.mood-btn:hover{border-color:var(--border);color:var(--text2);background:rgba(255,255,255,0.04)}
+.mood-btn.on{
+  border-color:var(--border-bright);
+  background:rgba(212,168,67,0.08);
+  color:var(--gold);
+}
+
+/* ─── TEXTAREA ─── */
+.dream-field{
+  position:relative;margin-bottom:0;
+}
+textarea{
+  width:100%;min-height:160px;
+  background:rgba(0,0,0,0.5);
+  border:1px solid var(--border);border-radius:10px;
+  padding:18px 20px;
+  font-family:'EB Garamond',Georgia,serif;
+  font-size:1.1rem;color:var(--text);line-height:1.75;
+  resize:none;outline:none;
+  transition:border-color 0.3s,box-shadow 0.3s;
+  caret-color:var(--gold);
+}
+textarea::placeholder{color:rgba(237,232,245,0.18);font-style:italic}
+textarea:focus{
+  border-color:rgba(212,168,67,0.35);
+  box-shadow:0 0 0 3px rgba(212,168,67,0.05),0 8px 40px rgba(155,89,245,0.1);
+}
+
+.field-foot{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 4px 18px;
+}
+.cc{font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:var(--text3)}
+.cc span{color:var(--gold-dim)}
+.shortcut-hint{font-size:0.8rem;color:var(--text4);font-style:italic}
+
+/* ─── PRIMARY BUTTON ─── */
+.decode-btn{
+  width:100%;padding:18px 24px;border:none;border-radius:10px;
+  background:linear-gradient(135deg,#c9922a 0%,#8a5e10 40%,#c9922a 100%);
+  background-size:200% 200%;
+  font-family:'Cinzel',serif;font-size:0.9rem;font-weight:700;
+  letter-spacing:0.18em;color:#fffbf0;cursor:none;
+  transition:background-position 0.6s,transform 0.2s,box-shadow 0.3s;
+  box-shadow:0 6px 28px rgba(180,130,40,0.25),inset 0 1px 0 rgba(255,240,180,0.2);
+  position:relative;overflow:hidden;
+}
+.decode-btn::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,240,180,0.15),transparent 50%);
+  opacity:0;transition:opacity 0.3s;
+}
+.decode-btn:hover::before{opacity:1}
+.decode-btn:hover{
+  background-position:100% 100%;
+  box-shadow:0 10px 40px rgba(180,130,40,0.4),inset 0 1px 0 rgba(255,240,180,0.3);
+  transform:translateY(-2px);
+}
+.decode-btn:active{transform:translateY(0)}
+.decode-btn:disabled{opacity:0.3;cursor:not-allowed;transform:none}
+
+/* ─── DIVIDER ─── */
+.or-divider{
+  display:flex;align-items:center;gap:12px;margin:16px 0;
+}
+.or-line{flex:1;height:1px;background:var(--border)}
+.or-text{font-family:'JetBrains Mono',monospace;font-size:0.55rem;letter-spacing:0.1em;color:var(--text4)}
+
+/* ─── SAMPLE DREAMS ─── */
+.samples-label{font-family:'JetBrains Mono',monospace;font-size:0.56rem;letter-spacing:0.14em;color:var(--text3);margin-bottom:8px}
+.samples{display:flex;flex-direction:column;gap:6px}
+.sample{
+  padding:9px 13px;border-radius:7px;
+  border:1px solid var(--text4);background:rgba(255,255,255,0.015);
+  font-size:0.82rem;color:var(--text3);cursor:none;
+  font-style:italic;line-height:1.45;
+  transition:all 0.2s;text-align:left;
+}
+.sample:hover{border-color:var(--border);color:var(--text2);background:rgba(255,255,255,0.03)}
+
+/* ─── LOADER ─── */
+.loader{display:none;margin-top:20px}
+.loader.show{display:block}
+.loader-box{
+  background:rgba(0,0,0,0.5);border:1px solid var(--border);border-radius:10px;
+  padding:22px 24px;
+}
+.orb-row{display:flex;justify-content:center;gap:8px;margin-bottom:16px}
+.orb{
+  width:8px;height:8px;border-radius:50%;
+  animation:orbpulse 1.5s ease-in-out infinite;
+}
+.orb:nth-child(1){background:var(--gold);animation-delay:0s}
+.orb:nth-child(2){background:var(--violet);animation-delay:0.2s}
+.orb:nth-child(3){background:var(--rose);animation-delay:0.4s}
+.orb:nth-child(4){background:var(--teal);animation-delay:0.6s}
+@keyframes orbpulse{0%,100%{transform:scale(0.6);opacity:0.25}50%{transform:scale(1.2);opacity:1}}
+.loader-steps{display:flex;justify-content:center;gap:28px;margin-bottom:10px}
+.lstep{
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  font-family:'JetBrains Mono',monospace;font-size:0.55rem;letter-spacing:0.08em;
+  color:var(--text3);opacity:0.3;transition:all 0.4s;
+}
+.lstep.on{opacity:1;color:var(--gold)}
+.lstep-dot{width:4px;height:4px;border-radius:50%;background:currentColor}
+.loader-msg{
+  font-family:'JetBrains Mono',monospace;font-size:0.6rem;
+  letter-spacing:0.08em;color:var(--text3);text-align:center;
+}
+
+/* ─── RESULT ─── */
+.result{display:none;margin-top:20px;animation:fadeUp 0.6s ease forwards}
+.result.show{display:block}
+
+.result-card{
+  border-radius:10px;overflow:hidden;
+  border:1px solid rgba(212,168,67,0.22);
+  background:rgba(0,0,0,0.55);
+  box-shadow:0 20px 60px rgba(0,0,0,0.5),inset 0 1px 0 rgba(212,168,67,0.08);
+}
+.result-header{
+  padding:13px 18px;
+  background:linear-gradient(90deg,rgba(212,168,67,0.08) 0%,rgba(155,89,245,0.04) 60%,transparent);
+  border-bottom:1px solid rgba(212,168,67,0.12);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.result-header-label{
+  font-family:'JetBrains Mono',monospace;font-size:0.58rem;
+  letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;
+}
+.src-tag{
+  font-family:'JetBrains Mono',monospace;font-size:0.55rem;
+  padding:3px 9px;border-radius:100px;letter-spacing:0.06em;
+}
+.src-tag.ds{background:rgba(15,188,212,0.1);border:1px solid rgba(15,188,212,0.2);color:var(--teal)}
+.src-tag.ai{background:rgba(224,92,138,0.1);border:1px solid rgba(224,92,138,0.2);color:var(--rose)}
+.result-body{padding:20px 20px 14px}
+.result-symbol-name{
+  font-family:'Cinzel',serif;font-size:1.55rem;
+  font-weight:700;color:var(--gold-bright);margin-bottom:12px;
+  line-height:1.1;
+}
+.result-interp{
+  font-size:1.05rem;line-height:1.9;color:rgba(237,232,245,0.82);font-weight:400;
+  font-style:italic;
+}
+.result-footer{
+  padding:10px 18px 12px;border-top:1px solid var(--text4);
+  display:flex;gap:8px;flex-wrap:wrap;
+}
+.rpill{
+  font-family:'JetBrains Mono',monospace;font-size:0.55rem;
+  padding:3px 9px;border-radius:100px;letter-spacing:0.04em;
+}
+.rpill.conf{background:rgba(212,168,67,0.07);border:1px solid rgba(212,168,67,0.15);color:var(--gold-dim)}
+.rpill.sym{background:rgba(255,255,255,0.03);border:1px solid var(--text4);color:var(--text3);font-style:italic}
+.rpill.mood{background:rgba(155,89,245,0.07);border:1px solid rgba(155,89,245,0.15);color:rgba(155,89,245,0.8)}
+
+/* ─── ACTION ROW ─── */
+.action-row{display:flex;gap:8px;margin-top:12px}
+.action-btn{
+  flex:1;padding:10px;border-radius:8px;
+  background:transparent;border:1px solid var(--border);
+  font-family:'JetBrains Mono',monospace;font-size:0.58rem;letter-spacing:0.1em;
+  color:var(--text3);cursor:none;transition:all 0.2s;
+}
+.action-btn:hover{border-color:var(--border-bright);color:var(--gold-dim);background:rgba(212,168,67,0.04)}
+.action-btn.saved{border-color:var(--sage);color:var(--sage)}
+
+/* ─── JOURNAL SECTION ─── */
+.journal-section{
+  max-width:1440px;margin:0 auto;
+  padding:0 48px 80px;
+  display:none;
+}
+.journal-section.show{display:block}
+
+.section-header{
+  display:flex;align-items:center;gap:20px;
+  padding:48px 0 28px;
+  border-top:1px solid var(--border);
+}
+.section-title{
+  font-family:'Cinzel',serif;font-size:1.2rem;font-weight:700;
+  color:var(--text2);white-space:nowrap;
+}
+.section-line{flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
+.section-count{
+  font-family:'JetBrains Mono',monospace;font-size:0.58rem;
+  letter-spacing:0.1em;color:var(--text3);
+}
+
+.journal-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:14px;
+}
+.jcard{
+  background:rgba(8,2,26,0.7);border:1px solid var(--border);border-radius:10px;
+  padding:18px 20px;cursor:none;
+  transition:border-color 0.25s,transform 0.25s,box-shadow 0.25s;
+  position:relative;overflow:hidden;
+}
+.jcard::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(212,168,67,0),transparent);
+  transition:background 0.3s;
+}
+.jcard:hover::before{background:linear-gradient(90deg,transparent,rgba(212,168,67,0.3),transparent)}
+.jcard:hover{
+  border-color:rgba(212,168,67,0.25);
+  transform:translateY(-3px);
+  box-shadow:0 12px 40px rgba(0,0,0,0.4);
+}
+.jcard-mood{
+  font-size:0.8rem;margin-bottom:8px;
+  display:flex;align-items:center;gap:6px;
+}
+.jcard-mood-label{
+  font-family:'JetBrains Mono',monospace;font-size:0.52rem;
+  letter-spacing:0.08em;color:var(--text4);text-transform:uppercase;
+}
+.jcard-dream{
+  font-size:0.9rem;font-style:italic;color:var(--text2);
+  margin-bottom:10px;line-height:1.55;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.jcard-symbol{
+  font-family:'Cinzel',serif;font-size:1rem;
+  font-weight:600;color:var(--gold);margin-bottom:4px;
+}
+.jcard-ts{
+  font-family:'JetBrains Mono',monospace;font-size:0.52rem;
+  letter-spacing:0.06em;color:var(--text4);
+}
+
+/* ─── SYMBOL EXPLORER ─── */
+.explorer-section{
+  max-width:1440px;margin:0 auto;
+  padding:0 48px 80px;
+}
+.symbol-search-wrap{
+  position:relative;margin-bottom:24px;
+}
+.symbol-search{
+  width:100%;padding:14px 44px 14px 18px;
+  background:rgba(0,0,0,0.5);border:1px solid var(--border);
+  border-radius:10px;
+  font-family:'EB Garamond',serif;font-size:1rem;color:var(--text);
+  outline:none;caret-color:var(--gold);
+  transition:border-color 0.3s;
+}
+.symbol-search::placeholder{color:var(--text3);font-style:italic}
+.symbol-search:focus{border-color:rgba(212,168,67,0.3)}
+.search-icon{
+  position:absolute;right:16px;top:50%;transform:translateY(-50%);
+  color:var(--text3);font-size:0.9rem;pointer-events:none;
+  font-family:'JetBrains Mono',monospace;
+}
+.symbol-pills{display:flex;flex-wrap:wrap;gap:8px}
+.sym-pill{
+  padding:6px 14px;border-radius:100px;
+  border:1px solid var(--text4);background:rgba(255,255,255,0.02);
+  font-family:'EB Garamond',serif;font-size:0.88rem;
+  color:var(--text3);cursor:none;transition:all 0.2s;
+}
+.sym-pill:hover{
+  border-color:var(--border-bright);color:var(--gold);
+  background:rgba(212,168,67,0.06);
+}
+
+/* ─── FOOTER ─── */
+footer{
+  border-top:1px solid var(--border);
+  background:rgba(2,0,8,0.8);
+}
+.footer-inner{
+  max-width:1440px;margin:0 auto;padding:24px 48px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.ft{font-family:'JetBrains Mono',monospace;font-size:0.56rem;letter-spacing:0.1em;color:var(--text4)}
+.ft a{color:var(--gold-dim);text-decoration:none}
+
+/* ─── TOAST ─── */
+.toast{
+  position:fixed;bottom:32px;right:32px;z-index:9000;
+  background:rgba(15,4,36,0.95);border:1px solid rgba(212,168,67,0.3);
+  border-radius:8px;padding:12px 20px;
+  font-family:'JetBrains Mono',monospace;font-size:0.65rem;
+  letter-spacing:0.08em;color:var(--gold);
+  transform:translateY(20px);opacity:0;
+  transition:all 0.3s;pointer-events:none;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);
+}
+.toast.show{transform:translateY(0);opacity:1}
+
+/* ─── ANIMATIONS ─── */
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(16px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:1024px){
+  .hero-section{grid-template-columns:1fr}
+  .hero-left{border-right:none;border-bottom:1px solid var(--border);padding:48px 32px}
+  .hero-right{padding:40px 32px}
+  .journal-section,.explorer-section{padding-left:32px;padding-right:32px}
+  .footer-inner{padding:24px 32px}
+  nav{padding:20px 32px}
+}
+@media(max-width:680px){
+  nav{padding:16px 20px}
+  .nav-center{display:none}
+  h1{font-size:2.8rem}
+  .hero-left{padding:36px 20px}
+  .hero-right{padding:28px 20px}
+  .journal-section,.explorer-section{padding:0 20px 60px}
+  .footer-inner{padding:20px;flex-direction:column;gap:8px;text-align:center}
+  .stats-row{flex-wrap:wrap}
+  .stat-block{min-width:45%}
+  #cursor,#cursor-ring{display:none}
+  body{cursor:auto}
+  .mood-btn,.sample,.decode-btn,.action-btn,.sym-pill,.jcard,.nav-link{cursor:pointer}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+
+<div class="page">
+
+  <!-- NAV -->
+  <nav>
+    <a class="logo" href="#">
+      <div class="logo-glyph">
+        <svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="19" cy="19" r="17" stroke="#d4a843" stroke-width="1.2" opacity="0.5"/>
+          <circle cx="19" cy="19" r="10" fill="rgba(212,168,67,0.08)" stroke="#d4a843" stroke-width="0.8"/>
+          <path d="M19 8 C24 14 24 24 19 30 C14 24 14 14 19 8Z" fill="rgba(212,168,67,0.15)" stroke="#d4a843" stroke-width="0.6"/>
+          <circle cx="19" cy="19" r="2.5" fill="#d4a843" opacity="0.8"/>
+        </svg>
+      </div>
+      <div class="logo-name">One<em>iro</em></div>
+    </a>
+    <div class="nav-center">
+      <button class="nav-link active" onclick="showSection('main')">Interpret</button>
+      <button class="nav-link" onclick="showSection('journal')">Journal</button>
+      <button class="nav-link" onclick="showSection('explorer')">Symbols</button>
+    </div>
+    <div class="nav-right">
+      <div class="status-dot"></div>
+      <div class="status-label">910 Symbols Active</div>
+    </div>
+  </nav>
+
+  <!-- TICKER -->
+  <div class="ticker-wrap">
+    <div class="ticker-track" id="tickerTrack"></div>
+  </div>
+
+  <!-- MAIN: HERO -->
+  <div id="sectionMain">
+    <div class="hero-section">
+
+      <!-- LEFT -->
+      <div class="hero-left">
+        <div class="eyebrow">
+          <div class="eyebrow-mark"></div>
+          <div class="eyebrow-text">Subconscious Decoder</div>
+        </div>
+
+        <h1>
+          <span class="w1">What did</span>
+          <span class="w1">your</span>
+          <span class="w2">dreams</span>
+          <span class="w1">reveal?</span>
+        </h1>
+
+        <p class="hero-sub">
+          Oneiro decodes the hidden language of your sleeping mind — blending 910 archetypal dream symbols with intelligent semantic matching to illuminate what your subconscious whispers.
+        </p>
+
+        <div class="stats-row">
+          <div class="stat-block">
+            <div class="stat-n">910</div>
+            <div class="stat-l">Dream Symbols</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-n">AI</div>
+            <div class="stat-l">Smart Match</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-n">∞</div>
+            <div class="stat-l">Interpretations</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-n" id="interpsCount">0</div>
+            <div class="stat-l">This Session</div>
+          </div>
+        </div>
+
+        <div class="how-section">
+          <div class="how-label">How it works</div>
+          <div class="how-steps">
+            <div class="how-step">
+              <div class="step-icon a">01</div>
+              <div>
+                <div class="step-title">Describe your dream</div>
+                <div class="step-desc">Write freely — the more detail, the richer the interpretation</div>
+              </div>
+            </div>
+            <div class="how-step">
+              <div class="step-icon b">02</div>
+              <div>
+                <div class="step-title">TF-IDF symbol matching</div>
+                <div class="step-desc">Extracts key motifs and scores them against 910 curated entries</div>
+              </div>
+            </div>
+            <div class="how-step">
+              <div class="step-icon c">03</div>
+              <div>
+                <div class="step-title">Psychological interpretation</div>
+                <div class="step-desc">Returns a deep symbolic reading drawn from Jungian archetypes</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: INPUT PANEL -->
+      <div class="hero-right">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">✦ Interpret Your Dream</div>
+            <div class="panel-chip">910 Symbols</div>
+          </div>
+
+          <div class="mood-row-label">Dream mood</div>
+          <div class="moods">
+            <button class="mood-btn" onclick="setMood(this,'peaceful')">😌 Peaceful</button>
+            <button class="mood-btn" onclick="setMood(this,'scary')">😨 Scary</button>
+            <button class="mood-btn" onclick="setMood(this,'confusing')">😵 Confusing</button>
+            <button class="mood-btn" onclick="setMood(this,'exciting')">✨ Exciting</button>
+            <button class="mood-btn" onclick="setMood(this,'sad')">😢 Sad</button>
+            <button class="mood-btn" onclick="setMood(this,'strange')">🌀 Strange</button>
+          </div>
+
+          <div class="dream-field">
+            <textarea id="dreamInput" maxlength="600"
+              placeholder="I was standing at the edge of a vast ocean when the moon split open and golden light poured down…"></textarea>
+          </div>
+
+          <div class="field-foot">
+            <div class="cc"><span id="charCount">0</span>/600</div>
+            <div class="shortcut-hint">Ctrl + Enter to decode</div>
+          </div>
+
+          <button class="decode-btn" id="interpretBtn" onclick="interpretDream()">
+            ✦ &nbsp; Decode This Dream &nbsp; ✦
+          </button>
+
+          <div class="or-divider">
+            <div class="or-line"></div>
+            <div class="or-text">or try an example</div>
+            <div class="or-line"></div>
+          </div>
+
+          <div class="samples-label">Sample Dreams</div>
+          <div class="samples" id="sampleDreams"></div>
+
+          <!-- LOADER -->
+          <div class="loader" id="loader">
+            <div class="loader-box">
+              <div class="orb-row">
+                <div class="orb"></div><div class="orb"></div>
+                <div class="orb"></div><div class="orb"></div>
+              </div>
+              <div class="loader-steps">
+                <div class="lstep on" id="ls1"><div class="lstep-dot"></div>Parsing</div>
+                <div class="lstep" id="ls2"><div class="lstep-dot"></div>Matching</div>
+                <div class="lstep" id="ls3"><div class="lstep-dot"></div>Decoding</div>
+              </div>
+              <div class="loader-msg" id="loaderMsg">Analyzing your dream…</div>
+            </div>
+          </div>
+
+          <!-- RESULT -->
+          <div class="result" id="result">
+            <div class="result-card">
+              <div class="result-header">
+                <span class="result-header-label">✦ Interpretation</span>
+                <span class="src-tag ds" id="srcTag">Dataset</span>
+              </div>
+              <div class="result-body">
+                <div class="result-symbol-name" id="resultSymbol"></div>
+                <div class="result-interp" id="resultText"></div>
+              </div>
+              <div class="result-footer">
+                <span class="rpill conf" id="confPill"></span>
+                <span class="rpill sym" id="matchPill"></span>
+                <span class="rpill mood" id="moodPill" style="display:none"></span>
+              </div>
+            </div>
+            <div class="action-row">
+              <button class="action-btn" onclick="copyResult()">✦ Copy</button>
+              <button class="action-btn" id="saveBtn" onclick="saveToJournal()">◆ Save to Journal</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- JOURNAL STRIP (inline, below hero) -->
+    <div class="journal-section" id="inlineJournal">
+      <div class="section-header">
+        <div class="section-title">Dream Journal</div>
+        <div class="section-line"></div>
+        <div class="section-count" id="journalCount">0 entries</div>
+      </div>
+      <div class="journal-grid" id="journalGrid"></div>
+    </div>
+  </div>
+
+  <!-- SECTION: JOURNAL -->
+  <div id="sectionJournal" style="display:none">
+    <div class="journal-section show" style="padding-top:48px">
+      <div class="section-header" style="padding-top:0;border-top:none">
+        <div class="section-title">Dream Journal</div>
+        <div class="section-line"></div>
+        <div class="section-count" id="journalCount2">0 entries</div>
+      </div>
+      <div class="journal-grid" id="journalGrid2"></div>
+      <div id="journalEmpty" style="text-align:center;padding:60px 0;color:var(--text3);font-style:italic;font-size:1.05rem;display:none">
+        No dreams saved yet. Interpret a dream and save it to your journal.
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION: SYMBOL EXPLORER -->
+  <div id="sectionExplorer" style="display:none">
+    <div class="explorer-section" style="padding-top:48px">
+      <div class="section-header" style="padding-top:0;border-top:none">
+        <div class="section-title">Symbol Explorer</div>
+        <div class="section-line"></div>
+      </div>
+      <div class="symbol-search-wrap">
+        <input type="text" class="symbol-search" id="symbolSearch"
+          placeholder="Search dream symbols…" oninput="filterSymbols(this.value)">
+        <div class="search-icon">⌕</div>
+      </div>
+      <div class="symbol-pills" id="symbolPills"></div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="ft">✦ Oneiro Dream Interpreter &nbsp;·&nbsp; Built with care</div>
+      <div class="ft">910 Symbols &nbsp;·&nbsp; TF-IDF Matching &nbsp;·&nbsp; Claude AI</div>
+    </div>
+  </footer>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── CURSOR ───────────────────────────────────────────────────────────────────
+const cur = document.getElementById('cursor');
+const ring = document.getElementById('cursor-ring');
+let mx = 0, my = 0, rx = 0, ry = 0;
+document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+(function animCursor(){
+  rx += (mx - rx) * 0.15;
+  ry += (my - ry) * 0.15;
+  if(cur) { cur.style.left = mx+'px'; cur.style.top = my+'px'; }
+  if(ring) { ring.style.left = rx+'px'; ring.style.top = ry+'px'; }
+  requestAnimationFrame(animCursor);
+})();
+
+// ─── CANVAS ───────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+const STARS = Array.from({length:280}, () => ({
+  x: Math.random(), y: Math.random(),
+  r: Math.random() * 1.4 + 0.15,
+  a: Math.random() * Math.PI * 2,
+  sp: Math.random() * 0.003 + 0.0008,
+  col: (() => {
+    const r = Math.random();
+    if(r > 0.92) return '#d4a843';
+    if(r > 0.82) return '#9b59f5';
+    if(r > 0.73) return '#0fbcd4';
+    return '#ede8f5';
+  })()
+}));
+
+// Shooting stars
+let shooters = [];
+function spawnShooter(){
+  if(Math.random() < 0.004 && shooters.length < 2){
+    shooters.push({
+      x: Math.random() * W,
+      y: Math.random() * H * 0.4,
+      vx: (Math.random() * 3 + 2) * (Math.random() > 0.5 ? 1 : -1),
+      vy: Math.random() * 1.5 + 0.8,
+      life: 1, tail: []
+    });
+  }
+}
+
+function resize(){ W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+resize(); window.addEventListener('resize', resize);
+
+let nebula = { x: 0.3, y: 0.3, vx: 0.0001, vy: 0.00008 };
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+
+  // Deep bg
+  const bg = ctx.createRadialGradient(W/2, H*0.2, 0, W/2, H*0.5, H);
+  bg.addColorStop(0, '#120630');
+  bg.addColorStop(0.35, '#0a0220');
+  bg.addColorStop(0.7, '#040012');
+  bg.addColorStop(1, '#020008');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+
+  // Nebula drift
+  nebula.x += nebula.vx; nebula.y += nebula.vy;
+  if(nebula.x > 0.8 || nebula.x < 0.1) nebula.vx *= -1;
+  if(nebula.y > 0.7 || nebula.y < 0.1) nebula.vy *= -1;
+  const neb = ctx.createRadialGradient(nebula.x*W, nebula.y*H, 0, nebula.x*W, nebula.y*H, W*0.4);
+  neb.addColorStop(0, 'rgba(155,89,245,0.04)');
+  neb.addColorStop(0.5, 'rgba(224,92,138,0.02)');
+  neb.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = neb; ctx.fillRect(0,0,W,H);
+
+  // Stars
+  STARS.forEach(s => {
+    s.a += s.sp;
+    const alpha = (Math.sin(s.a) * 0.5 + 0.5) * 0.8 + 0.1;
+    ctx.beginPath();
+    ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2);
+    ctx.fillStyle = s.col; ctx.globalAlpha = alpha; ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // Moon
+  const mx2 = W - 100, my2 = 75;
+  const mg = ctx.createRadialGradient(mx2-5, my2-5, 0, mx2, my2, 52);
+  mg.addColorStop(0, 'rgba(255,253,240,0.97)');
+  mg.addColorStop(0.4, 'rgba(240,218,150,0.8)');
+  mg.addColorStop(0.75, 'rgba(212,168,67,0.35)');
+  mg.addColorStop(1, 'rgba(155,100,30,0)');
+  ctx.beginPath(); ctx.arc(mx2,my2,46,0,Math.PI*2); ctx.fillStyle=mg; ctx.fill();
+  // Moon halo
+  const mh = ctx.createRadialGradient(mx2,my2,0,mx2,my2,140);
+  mh.addColorStop(0,'rgba(212,168,67,0.09)');
+  mh.addColorStop(0.5,'rgba(212,168,67,0.03)');
+  mh.addColorStop(1,'rgba(212,168,67,0)');
+  ctx.beginPath(); ctx.arc(mx2,my2,140,0,Math.PI*2); ctx.fillStyle=mh; ctx.fill();
+
+  // Shooting stars
+  spawnShooter();
+  shooters = shooters.filter(s => s.life > 0);
+  shooters.forEach(s => {
+    s.tail.push({x:s.x,y:s.y});
+    if(s.tail.length > 18) s.tail.shift();
+    s.x += s.vx; s.y += s.vy; s.life -= 0.025;
+    s.tail.forEach((pt, i) => {
+      const alpha = (i / s.tail.length) * s.life * 0.7;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, 0.8, 0, Math.PI*2);
+      ctx.fillStyle = '#d4a843'; ctx.globalAlpha = alpha; ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  });
+
+  requestAnimationFrame(draw);
+}
+draw();
+
+// ─── TICKER ───────────────────────────────────────────────────────────────────
+const TICKER_SYMBOLS = [
+  'Abyss','Altar','Angel','Aura','Bridge','Cave','Crown','Darkness',
+  'Door','Dragon','Eclipse','Eye','Falling','Fire','Flying','Forest',
+  'Ghost','Gold','Labyrinth','Light','Mirror','Moon','Mountain','Ocean',
+  'Oracle','Phoenix','Rain','River','Serpent','Shadow','Storm','Temple',
+  'Teeth','Threshold','Void','Water','Wind','Wings','Wound','Zodiac'
+];
+const track = document.getElementById('tickerTrack');
+[...TICKER_SYMBOLS,...TICKER_SYMBOLS,...TICKER_SYMBOLS].forEach((s,i) => {
+  const el = document.createElement('span');
+  el.className = 'ticker-item' + (i%5===0?' lit':'');
+  el.textContent = '✦ ' + s;
+  track.appendChild(el);
+});
+
+// ─── SAMPLE DREAMS ────────────────────────────────────────────────────────────
+const SAMPLES = [
+  'I was flying high above silver clouds, weightless and free, until the sky turned dark',
+  'Teeth were falling out one by one into my hands as I stood frozen before a mirror',
+  'I was being chased through an endless forest by a shadow I could never see',
+  'A great serpent coiled around a golden tower as the moon hung low and blood-red',
+];
+const samplesEl = document.getElementById('sampleDreams');
+SAMPLES.forEach(s => {
+  const btn = document.createElement('button');
+  btn.className = 'sample';
+  btn.textContent = '"' + s + '"';
+  btn.onclick = () => {
+    document.getElementById('dreamInput').value = s;
+    document.getElementById('charCount').textContent = s.length;
+  };
+  samplesEl.appendChild(btn);
+});
+
+// ─── SYMBOL EXPLORER DATA ─────────────────────────────────────────────────────
+const ALL_SYMBOLS = [
+  'Abyss','Accident','Age','Altar','Angel','Animals','Attic','Autumn',
+  'Baby','Basement','Bat','Bear','Betrayal','Bird','Blood','Bridge',
+  'Cave','Chase','Child','Circle','Clock','Clouds','Colors','Crown',
+  'Darkness','Death','Desert','Devil','Door','Dragon','Drowning',
+  'Eagle','Earth','Eclipse','Elephant','Eye','Falling','Father',
+  'Fire','Fish','Flood','Flying','Forest','Funeral','Ghost','Gold',
+  'House','Ice','Island','Journey','Keys','Labyrinth','Light','Lion',
+  'Mirror','Moon','Mother','Mountain','Naked','Ocean','Oracle','Prison',
+  'Rain','River','Rose','Serpent','Shadow','Silence','Skeleton','Sky',
+  'Snow','Spider','Star','Storm','Sun','Sword','Temple','Teeth','Thunder',
+  'Tower','Tree','Triangle','Tunnel','Void','Water','Wedding','Wind',
+  'Wings','Wolf','Wound','Zodiac'
+];
+
+const pillsEl = document.getElementById('symbolPills');
+function renderPills(symbols){
+  pillsEl.innerHTML = '';
+  symbols.forEach(s => {
+    const p = document.createElement('button');
+    p.className = 'sym-pill';
+    p.textContent = s;
+    p.onclick = () => {
+      document.getElementById('dreamInput').value = 'I dreamed of ' + s.toLowerCase();
+      document.getElementById('charCount').textContent = document.getElementById('dreamInput').value.length;
+      showSection('main');
+      showToast('Dream pre-filled — tap Decode!');
+    };
+    pillsEl.appendChild(p);
+  });
+}
+renderPills(ALL_SYMBOLS);
+function filterSymbols(q){
+  const f = ALL_SYMBOLS.filter(s => s.toLowerCase().includes(q.toLowerCase()));
+  renderPills(f.length ? f : ALL_SYMBOLS);
+}
+
+// ─── SECTION NAVIGATION ───────────────────────────────────────────────────────
+function showSection(name){
+  document.getElementById('sectionMain').style.display = name === 'main' ? 'block' : 'none';
+  document.getElementById('sectionJournal').style.display = name === 'journal' ? 'block' : 'none';
+  document.getElementById('sectionExplorer').style.display = name === 'explorer' ? 'block' : 'none';
+  document.querySelectorAll('.nav-link').forEach((l,i) => {
+    l.classList.toggle('active', ['main','journal','explorer'][i] === name);
+  });
+  if(name === 'journal') renderJournal2();
+}
+
+// ─── MOOD ─────────────────────────────────────────────────────────────────────
+let selectedMood = '';
+function setMood(btn, mood){
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  selectedMood = mood === selectedMood ? '' : mood;
+  if(selectedMood === '') btn.classList.remove('on');
+}
+
+// ─── CHAR COUNTER ─────────────────────────────────────────────────────────────
+document.getElementById('dreamInput').addEventListener('input', function(){
+  document.getElementById('charCount').textContent = this.value.length;
+});
+
+// ─── JOURNAL ─────────────────────────────────────────────────────────────────
+let journal = JSON.parse(localStorage.getItem('oneiro_journal') || '[]');
+let sessionCount = 0;
+let lastResult = null;
+
+function updateSessionCount(){
+  document.getElementById('interpsCount').textContent = sessionCount;
+}
+
+function saveJournal(){
+  try { localStorage.setItem('oneiro_journal', JSON.stringify(journal)); } catch(e){}
+}
+
+function renderJournal(){
+  const grid = document.getElementById('journalGrid');
+  const section = document.getElementById('inlineJournal');
+  document.getElementById('journalCount').textContent = journal.length + ' entr' + (journal.length === 1 ? 'y' : 'ies');
+  if(!journal.length){ section.classList.remove('show'); return; }
+  section.classList.add('show');
+  grid.innerHTML = '';
+  journal.slice(0,6).forEach(h => renderJCard(grid, h));
+}
+
+function renderJournal2(){
+  const grid = document.getElementById('journalGrid2');
+  const empty = document.getElementById('journalEmpty');
+  document.getElementById('journalCount2').textContent = journal.length + ' entr' + (journal.length === 1 ? 'y' : 'ies');
+  grid.innerHTML = '';
+  if(!journal.length){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  journal.forEach(h => renderJCard(grid, h));
+}
+
+function renderJCard(grid, h){
+  const c = document.createElement('div');
+  c.className = 'jcard';
+  const moodHtml = h.mood ? `<div class="jcard-mood">
+    <span>${getMoodEmoji(h.mood)}</span>
+    <span class="jcard-mood-label">${h.mood}</span>
+  </div>` : '';
+  c.innerHTML = `${moodHtml}
+    <div class="jcard-dream">"${h.dream.substring(0,100)}"</div>
+    <div class="jcard-symbol">${h.symbol}</div>
+    <div class="jcard-ts">${h.ts || ''}</div>`;
+  c.onclick = () => {
+    showSection('main');
+    showResult(h.symbol, h.interp, h.conf || 90, h.symbol, h.source || 'dataset');
+    setTimeout(() => document.getElementById('result').scrollIntoView({behavior:'smooth', block:'nearest'}), 100);
+  };
+  grid.appendChild(c);
+}
+
+function getMoodEmoji(mood){
+  const map = {peaceful:'😌',scary:'😨',confusing:'😵',exciting:'✨',sad:'😢',strange:'🌀'};
+  return map[mood] || '◆';
+}
+
+function saveToJournal(){
+  if(!lastResult) return;
+  const dream = document.getElementById('dreamInput').value.trim();
+  const entry = {
+    dream, symbol: lastResult.symbol, interp: lastResult.interp,
+    conf: lastResult.conf, source: lastResult.source,
+    mood: selectedMood,
+    ts: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
+  };
+  journal.unshift(entry);
+  if(journal.length > 50) journal.pop();
+  saveJournal();
+  renderJournal();
+  const btn = document.getElementById('saveBtn');
+  btn.textContent = '✓ Saved';
+  btn.classList.add('saved');
+  showToast('Dream saved to journal ✦');
+  setTimeout(() => { btn.textContent = '◆ Save to Journal'; btn.classList.remove('saved'); }, 2500);
+}
+
+// ─── RESULT ───────────────────────────────────────────────────────────────────
+function showResult(symbol, interp, conf, matched, source){
+  const tag = document.getElementById('srcTag');
+  tag.textContent = source === 'claude' ? '✦ Claude AI' : '✦ Dataset';
+  tag.className = 'src-tag ' + (source === 'claude' ? 'ai' : 'ds');
+  document.getElementById('resultSymbol').textContent = symbol;
+  document.getElementById('resultText').textContent = interp;
+  document.getElementById('confPill').textContent = conf + '% match';
+  document.getElementById('matchPill').textContent = matched;
+  const mp = document.getElementById('moodPill');
+  if(selectedMood){
+    mp.textContent = getMoodEmoji(selectedMood) + ' ' + selectedMood;
+    mp.style.display = 'inline-block';
+  } else { mp.style.display = 'none'; }
+  document.getElementById('result').classList.add('show');
+  lastResult = {symbol, interp, conf, source};
+  document.getElementById('saveBtn').textContent = '◆ Save to Journal';
+  document.getElementById('saveBtn').classList.remove('saved');
+}
+
+// ─── LOADER ───────────────────────────────────────────────────────────────────
+let loaderTimer;
+const MSGS = ['Parsing your dream symbols…','Searching 910 entries…','Decoding subconscious meaning…'];
+const LIDS = ['ls1','ls2','ls3'];
+function startLoader(){
+  document.getElementById('loader').classList.add('show');
+  document.getElementById('result').classList.remove('show');
+  document.getElementById('interpretBtn').disabled = true;
+  let i = 0;
+  LIDS.forEach(id => document.getElementById(id).classList.remove('on'));
+  document.getElementById('ls1').classList.add('on');
+  document.getElementById('loaderMsg').textContent = MSGS[0];
+  loaderTimer = setInterval(() => {
+    i++; if(i >= LIDS.length) return;
+    LIDS.forEach(id => document.getElementById(id).classList.remove('on'));
+    document.getElementById(LIDS[i]).classList.add('on');
+    document.getElementById('loaderMsg').textContent = MSGS[i];
+  }, 750);
+}
+function stopLoader(){
+  clearInterval(loaderTimer);
+  document.getElementById('loader').classList.remove('show');
+  document.getElementById('interpretBtn').disabled = false;
+}
+
+// ─── INTERPRET ────────────────────────────────────────────────────────────────
+async function interpretDream(){
+  const dream = document.getElementById('dreamInput').value.trim();
+  if(!dream){ showToast('Please describe your dream first'); return; }
+  startLoader();
+  try {
+    const r = await fetch('/interpret', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({dream, mood: selectedMood})
+    });
+    const d = await r.json();
+    stopLoader();
+    showResult(d.matched_dream, d.interpretation, d.confidence, d.matched_dream, d.source);
+    sessionCount++;
+    updateSessionCount();
+    renderJournal();
+  } catch(e){
+    stopLoader();
+    showToast('Something went wrong — please try again');
+  }
+}
+
+// ─── COPY ─────────────────────────────────────────────────────────────────────
+function copyResult(){
+  const symbol = document.getElementById('resultSymbol').textContent;
+  const text = document.getElementById('resultText').textContent;
+  navigator.clipboard.writeText(`Dream Symbol: ${symbol}\n\n${text}\n\n— Oneiro Dream Interpreter`).then(() => {
+    showToast('Interpretation copied ✦');
+  });
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ─── KEYBOARD ────────────────────────────────────────────────────────────────
+document.getElementById('dreamInput').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.ctrlKey) interpretDream();
+});
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+renderJournal();
+updateSessionCount();
+</script>
+</body>
+</html>
